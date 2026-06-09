@@ -11,6 +11,7 @@ import { GetTranscriptsTool } from "./video/getTranscripts.js";
 import { GetVideoCommentsTool } from "./video/getVideoComments.js";
 import { GetChannelStatisticsTool } from "./channel/getChannelStatistics.js";
 import { GetChannelTopVideosTool } from "./channel/getChannelTopVideos.js";
+import { GetChannelRecentVideosTool } from "./channel/getChannelRecentVideos.js";
 import { GetTrendingVideosTool } from "./general/getTrendingVideos.js";
 import { GetVideoCategoriesTool } from "./general/getVideoCategories.js";
 import { FindConsistentOutlierChannelsTool } from "./general/findConsistentOutlierChannels.js";
@@ -32,6 +33,7 @@ const TOOL_CLASSES = [
   GetVideoCommentsTool,
   GetChannelStatisticsTool,
   GetChannelTopVideosTool,
+  GetChannelRecentVideosTool,
   GetTrendingVideosTool,
   GetVideoCategoriesTool,
 ];
@@ -80,10 +82,4 @@ export function registerTools(server: McpServer, container: IServiceContainer) {
         try {
           return await toolInstance.execute(args);
         } catch (err) {
-          return formatError(err);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }) as any
-    );
-  }
-}
+          return formatError(err)

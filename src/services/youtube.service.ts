@@ -59,6 +59,14 @@ export interface TrendingOptions {
   maxResults?: number;
 }
 
+export interface ChannelRecentOptions {
+  channelId: string;
+  maxResults?: number;
+  maxDays?: number;
+  includeTags?: boolean;
+  descriptionDetail?: "NONE" | "SNIPPET" | "LONG";
+}
+
 const API_COSTS = {
   // Read-operations
   "search.list": 100,
@@ -601,6 +609,160 @@ export class YoutubeService {
     );
   }
 
+  async getChannelRecentVideos(
+    options: ChannelRecentOptions
+  ): Promise<LeanChannelTopVideo[]> {
+    const cacheKey = this.cacheService.createOperationKey(
+      "getChannelRecentVideos",
+      options
+    );
+
+    const operation = async (): Promise<LeanChannelTopVideo[]> => {
+      try {
+        const {
+          channelId,
+          maxResults = 10,
+          maxDays = 30,
+          includeTags = false,
+          descriptionDetail = "NONE",
+        } = options;
+
+        const targetResults = Math.min(maxResults, this.ABSOLUTE_MAX_RESULTS);
+
+        const publishedAfter = new Date(
+          Date.now() - maxDays * 24 * 60 * 60 * 1000
+        ).toISOString();
+
+        const searchResults: youtube_v3.Schema$SearchResult[] = [];
+        let nextPageToken: string | undefined = undefined;
+
+        while (searchResults.length < targetResults) {
+          const response = await this.trackCost(
+            () =>
+              this.youtube.search.list({
+                part: ["id"],
+                channelId: channelId,
+                maxResults: Math.min(
+                  this.MAX_RESULTS_PER_PAGE,
+                  targetResults - searchResults.length
+                ),
+                order: "date",
+                type: ["video"],
+                publishedAfter: publishedAfter,
+                pageToken: nextPageToken,
+              }),
+            API_COSTS["search.list"]
+          );
+          const searchResponse: youtube_v3.Schema$SearchListResponse =
+            response.data;
+
+          if (!searchResponse.items?.length) {
+            break;
+          }
+
+          searchResults.push(...searchResponse.items);
+          nextPageToken = searchResponse.nextPageToken || undefined;
+
+          if (!nextPageToken) {
+            break;
+          }
+        }
+
+        if (!searchResults.length) {
+          return [];
+        }
+
+        const videoIds = searchResults
+          .map((item) => item.id?.videoId)
+          .filter((id): id is string => id !== undefined);
+
+        const videoDetails: youtube_v3.Schema$Video[] = [];
+        const detailPromises = [];
+        for (let i = 0; i < videoIds.length; i += this.MAX_RESULTS_PER_PAGE) {
+          const batch = videoIds.slice(i, i + this.MAX_RESULTS_PER_PAGE);
+          const promise = this.trackCost(
+            () =>
+              this.youtube.videos.list({
+                part: ["snippet", "statistics", "contentDetails"],
+                id: batch,
+              }),
+            API_COSTS["videos.list"]
+          );
+          detailPromises.push(promise);
+        }
+
+        const detailOutcomes = await Promise.allSettled(detailPromises);
+        for (const outcome of detailOutcomes) {
+          if (outcome.status === "fulfilled") {
+            const response = outcome.value;
+            if (response.data.items) {
+              videoDetails.push(...response.data.items);
+            }
+          } else {
+            if (outcome.reason instanceof AppError) throw outcome.reason;
+            console.error(
+              "A video details batch in getChannelRecentVideos failed:",
+              outcome.reason
+            );
+          }
+        }
+
+        return videoDetails.slice(0, targetResults).map((video) => {
+          const viewCount = parseYouTubeNumber(video.statistics?.viewCount);
+          const likeCount = parseYouTubeNumber(video.statistics?.likeCount);
+          const commentCount = parseYouTubeNumber(
+            video.statistics?.commentCount
+          );
+
+          const formattedDescription = formatDescription(
+            video.snippet?.description,
+            descriptionDetail
+          );
+
+          const baseVideo = {
+            id: video.id,
+            title: video.snippet?.title,
+            publishedAt: video.snippet?.publishedAt,
+            duration: video.contentDetails?.duration,
+            viewCount: viewCount,
+            likeCount: likeCount,
+            commentCount: commentCount,
+            likeToViewRatio: calculateLikeToViewRatio(viewCount, likeCount),
+            commentToViewRatio: calculateCommentToViewRatio(
+              viewCount,
+              commentCount
+            ),
+            categoryId: video.snippet?.categoryId ?? null,
+            defaultLanguage: video.snippet?.defaultLanguage ?? null,
+          };
+
+          const videoWithDescription =
+            formattedDescription !== undefined
+              ? { ...baseVideo, description: formattedDescription }
+              : baseVideo;
+
+          return includeTags
+            ? { ...videoWithDescription, tags: video.snippet?.tags ?? [] }
+            : videoWithDescription;
+        });
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new YouTubeApiError(
+          `YouTube API call for getChannelRecentVideos failed for channelId: ${options.channelId}`,
+          error
+        );
+      }
+    };
+
+    return this.cacheService.getOrSet(
+      cacheKey,
+      operation,
+      CACHE_TTLS.STANDARD,
+      CACHE_COLLECTIONS.CHANNEL_RECENT_VIDEOS,
+      options
+    );
+  }
+
   async getTrendingVideos(
     options: TrendingOptions
   ): Promise<LeanTrendingVideo[]> {
@@ -664,175 +826,4 @@ export class YoutubeService {
       }
     };
 
-    return this.cacheService.getOrSet(
-      cacheKey,
-      operation,
-      CACHE_TTLS.DYNAMIC,
-      CACHE_COLLECTIONS.TRENDING_VIDEOS,
-      options
-    );
-  }
-
-  async getVideoComments(
-    options: GetVideoCommentsParams
-  ): Promise<LeanComment[]> {
-    const cacheKey = this.cacheService.createOperationKey(
-      "getVideoComments",
-      options
-    );
-
-    const operation = async (): Promise<LeanComment[]> => {
-      try {
-        const {
-          videoId,
-          maxResults,
-          order,
-          maxReplies = 0,
-          commentDetail,
-        } = options;
-
-        const commentThreadsResponse = await this.trackCost(
-          () =>
-            this.youtube.commentThreads.list({
-              part: ["snippet"],
-              videoId: videoId,
-              maxResults: maxResults,
-              order: order,
-            }),
-          API_COSTS["commentThreads.list"]
-        );
-
-        const topLevelComments = commentThreadsResponse.data.items || [];
-
-        let allReplies: youtube_v3.Schema$Comment[][] = [];
-        if (maxReplies > 0 && topLevelComments.length > 0) {
-          const replyPromises = topLevelComments.map((commentThread) => {
-            const parentId = commentThread.id;
-            if (!parentId) return Promise.resolve([]);
-            return this.trackCost(
-              () =>
-                this.youtube.comments.list({
-                  part: ["snippet"],
-                  parentId: parentId,
-                  maxResults: maxReplies,
-                }),
-              API_COSTS["comments.list"]
-            ).then((res) => res.data.items || []);
-          });
-          allReplies = await Promise.all(replyPromises);
-        }
-
-        return topLevelComments.map((commentThread, index) => {
-          const topLevelSnippet =
-            commentThread.snippet?.topLevelComment?.snippet;
-          const replies = allReplies[index] || [];
-
-          const leanReplies: LeanReply[] = replies.map((reply) => {
-            const replySnippet = reply.snippet;
-            return {
-              replyId: reply.id ?? "",
-              author: replySnippet?.authorDisplayName ?? "",
-              text:
-                commentDetail === "SNIPPET"
-                  ? replySnippet?.textDisplay?.substring(0, 200) || ""
-                  : replySnippet?.textDisplay || "",
-              publishedAt: replySnippet?.publishedAt ?? "",
-              likeCount: replySnippet?.likeCount || 0,
-            };
-          });
-
-          return {
-            commentId: commentThread.id ?? "",
-            author: topLevelSnippet?.authorDisplayName ?? "",
-            text:
-              commentDetail === "SNIPPET"
-                ? topLevelSnippet?.textDisplay?.substring(0, 200) || ""
-                : topLevelSnippet?.textDisplay || "",
-            publishedAt: topLevelSnippet?.publishedAt ?? "",
-            likeCount: topLevelSnippet?.likeCount || 0,
-            replies: leanReplies,
-          };
-        });
-      } catch (error: unknown) {
-        if (
-          error &&
-          typeof error === "object" &&
-          "response" in error &&
-          error.response &&
-          typeof error.response === "object" &&
-          "status" in error.response &&
-          error.response.status === 403
-        ) {
-          // Define a type for the expected error structure
-          type YouTubeApiError = {
-            error: {
-              errors: [{ reason: string }];
-            };
-          };
-
-          // You might need to adjust the type assertion based on your error structure
-          const errorData = (error.response as { data?: YouTubeApiError }).data;
-          if (errorData?.error?.errors?.[0]?.reason === "commentsDisabled") {
-            return [];
-          }
-        }
-        if (error instanceof AppError) throw error;
-        throw new YouTubeApiError(
-          `YouTube API call for getVideoComments failed for videoId: ${options.videoId}`,
-          error
-        );
-      }
-    };
-
-    return this.cacheService.getOrSet(
-      cacheKey,
-      operation,
-      CACHE_TTLS.DYNAMIC,
-      CACHE_COLLECTIONS.VIDEO_COMMENTS,
-      options
-    );
-  }
-
-  async getVideoCategories(regionCode: string = "US") {
-    const cacheKey = this.cacheService.createOperationKey(
-      "getVideoCategories",
-      {
-        regionCode,
-      }
-    );
-
-    const operation = async () => {
-      try {
-        const response = await this.trackCost(
-          () =>
-            this.youtube.videoCategories.list({
-              part: ["snippet"],
-              regionCode: regionCode,
-            }),
-          API_COSTS["videoCategories.list"]
-        );
-
-        const categories = response.data.items?.map((category) => ({
-          id: category.id,
-          title: category.snippet?.title,
-        }));
-
-        return categories || [];
-      } catch (error) {
-        if (error instanceof AppError) throw error;
-        throw new YouTubeApiError(
-          `YouTube API call for getVideoCategories failed for regionCode: ${regionCode}`,
-          error
-        );
-      }
-    };
-
-    return this.cacheService.getOrSet(
-      cacheKey,
-      operation,
-      CACHE_TTLS.STATIC,
-      CACHE_COLLECTIONS.VIDEO_CATEGORIES,
-      { regionCode }
-    );
-  }
-}
+ 
