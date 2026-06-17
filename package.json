@@ -1,6 +1,6 @@
 {
   "name": "@kirbah/mcp-youtube",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "mcpName": "io.github.kirbah/mcp-youtube",
   "description": "YouTube MCP server for token-optimized, structured data using the YouTube Data API v3.",
   "main": "dist/index.js",
@@ -61,12 +61,12 @@
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.4.0",
-    "jest": "30.3.0",
+    "jest": "30.4.2",
     "jest-junit": "^17.0.0",
     "prettier": "^3.6.2",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.4.9",
-    "typescript": "^5.9.2",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.58.1"
   },
   "engines": {

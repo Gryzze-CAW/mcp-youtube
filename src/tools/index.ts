@@ -82,4 +82,10 @@ export function registerTools(server: McpServer, container: IServiceContainer) {
         try {
           return await toolInstance.execute(args);
         } catch (err) {
-          return formatError(err)
+          return formatError(err);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any
+    );
+  }
+}

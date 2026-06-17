@@ -53,18 +53,18 @@ export interface ChannelOptions {
   descriptionDetail?: "NONE" | "SNIPPET" | "LONG";
 }
 
-export interface TrendingOptions {
-  regionCode?: string;
-  categoryId?: string;
-  maxResults?: number;
-}
-
 export interface ChannelRecentOptions {
   channelId: string;
   maxResults?: number;
   maxDays?: number;
   includeTags?: boolean;
   descriptionDetail?: "NONE" | "SNIPPET" | "LONG";
+}
+
+export interface TrendingOptions {
+  regionCode?: string;
+  categoryId?: string;
+  maxResults?: number;
 }
 
 const API_COSTS = {
@@ -763,6 +763,7 @@ export class YoutubeService {
     );
   }
 
+
   async getTrendingVideos(
     options: TrendingOptions
   ): Promise<LeanTrendingVideo[]> {
@@ -826,4 +827,175 @@ export class YoutubeService {
       }
     };
 
- 
+    return this.cacheService.getOrSet(
+      cacheKey,
+      operation,
+      CACHE_TTLS.DYNAMIC,
+      CACHE_COLLECTIONS.TRENDING_VIDEOS,
+      options
+    );
+  }
+
+  async getVideoComments(
+    options: GetVideoCommentsParams
+  ): Promise<LeanComment[]> {
+    const cacheKey = this.cacheService.createOperationKey(
+      "getVideoComments",
+      options
+    );
+
+    const operation = async (): Promise<LeanComment[]> => {
+      try {
+        const {
+          videoId,
+          maxResults,
+          order,
+          maxReplies = 0,
+          commentDetail,
+        } = options;
+
+        const commentThreadsResponse = await this.trackCost(
+          () =>
+            this.youtube.commentThreads.list({
+              part: ["snippet"],
+              videoId: videoId,
+              maxResults: maxResults,
+              order: order,
+            }),
+          API_COSTS["commentThreads.list"]
+        );
+
+        const topLevelComments = commentThreadsResponse.data.items || [];
+
+        let allReplies: youtube_v3.Schema$Comment[][] = [];
+        if (maxReplies > 0 && topLevelComments.length > 0) {
+          const replyPromises = topLevelComments.map((commentThread) => {
+            const parentId = commentThread.id;
+            if (!parentId) return Promise.resolve([]);
+            return this.trackCost(
+              () =>
+                this.youtube.comments.list({
+                  part: ["snippet"],
+                  parentId: parentId,
+                  maxResults: maxReplies,
+                }),
+              API_COSTS["comments.list"]
+            ).then((res) => res.data.items || []);
+          });
+          allReplies = await Promise.all(replyPromises);
+        }
+
+        return topLevelComments.map((commentThread, index) => {
+          const topLevelSnippet =
+            commentThread.snippet?.topLevelComment?.snippet;
+          const replies = allReplies[index] || [];
+
+          const leanReplies: LeanReply[] = replies.map((reply) => {
+            const replySnippet = reply.snippet;
+            return {
+              replyId: reply.id ?? "",
+              author: replySnippet?.authorDisplayName ?? "",
+              text:
+                commentDetail === "SNIPPET"
+                  ? replySnippet?.textDisplay?.substring(0, 200) || ""
+                  : replySnippet?.textDisplay || "",
+              publishedAt: replySnippet?.publishedAt ?? "",
+              likeCount: replySnippet?.likeCount || 0,
+            };
+          });
+
+          return {
+            commentId: commentThread.id ?? "",
+            author: topLevelSnippet?.authorDisplayName ?? "",
+            text:
+              commentDetail === "SNIPPET"
+                ? topLevelSnippet?.textDisplay?.substring(0, 200) || ""
+                : topLevelSnippet?.textDisplay || "",
+            publishedAt: topLevelSnippet?.publishedAt ?? "",
+            likeCount: topLevelSnippet?.likeCount || 0,
+            replies: leanReplies,
+          };
+        });
+      } catch (error: unknown) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "response" in error &&
+          error.response &&
+          typeof error.response === "object" &&
+          "status" in error.response &&
+          error.response.status === 403
+        ) {
+          // Define a type for the expected error structure
+          type YouTubeApiError = {
+            error: {
+              errors: [{ reason: string }];
+            };
+          };
+
+          // You might need to adjust the type assertion based on your error structure
+          const errorData = (error.response as { data?: YouTubeApiError }).data;
+          if (errorData?.error?.errors?.[0]?.reason === "commentsDisabled") {
+            return [];
+          }
+        }
+        if (error instanceof AppError) throw error;
+        throw new YouTubeApiError(
+          `YouTube API call for getVideoComments failed for videoId: ${options.videoId}`,
+          error
+        );
+      }
+    };
+
+    return this.cacheService.getOrSet(
+      cacheKey,
+      operation,
+      CACHE_TTLS.DYNAMIC,
+      CACHE_COLLECTIONS.VIDEO_COMMENTS,
+      options
+    );
+  }
+
+  async getVideoCategories(regionCode: string = "US") {
+    const cacheKey = this.cacheService.createOperationKey(
+      "getVideoCategories",
+      {
+        regionCode,
+      }
+    );
+
+    const operation = async () => {
+      try {
+        const response = await this.trackCost(
+          () =>
+            this.youtube.videoCategories.list({
+              part: ["snippet"],
+              regionCode: regionCode,
+            }),
+          API_COSTS["videoCategories.list"]
+        );
+
+        const categories = response.data.items?.map((category) => ({
+          id: category.id,
+          title: category.snippet?.title,
+        }));
+
+        return categories || [];
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new YouTubeApiError(
+          `YouTube API call for getVideoCategories failed for regionCode: ${regionCode}`,
+          error
+        );
+      }
+    };
+
+    return this.cacheService.getOrSet(
+      cacheKey,
+      operation,
+      CACHE_TTLS.STATIC,
+      CACHE_COLLECTIONS.VIDEO_CATEGORIES,
+      { regionCode }
+    );
+  }
+}
