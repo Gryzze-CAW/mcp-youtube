@@ -1,6 +1,6 @@
 {
   "name": "@kirbah/mcp-youtube",
-  "version": "1.1.11",
+  "version": "1.1.14",
   "mcpName": "io.github.kirbah/mcp-youtube",
   "description": "YouTube MCP server for token-optimized, structured data using the YouTube Data API v3.",
   "main": "dist/index.js",
@@ -48,29 +48,30 @@
   "homepage": "https://github.com/kirbah/mcp-youtube#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "googleapis": "^171.4.0",
-    "mongodb": "^7.0.0",
-    "tsx": "^4.20.4",
+    "googleapis": "^173.0.0",
+    "mongodb": "^7.5.0",
+    "tsx": "^4.23.1",
     "youtube-transcript-plus": "^2.0.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@modelcontextprotocol/inspector": "^2.6.0",
     "@eslint/js": "^10.0.1",
     "@types/jest": "30.0.0",
-    "@types/node": "^25.5.2",
-    "eslint": "^10.2.0",
+    "@types/node": "^26.5.1",
+    "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
-    "globals": "^17.4.0",
-    "jest": "30.4.2",
+    "globals": "^17.12.0",
+    "jest": "30.5.1",
     "jest-junit": "^17.0.0",
-    "prettier": "^3.6.2",
+    "prettier": "^3.9.6",
     "rimraf": "^6.0.1",
-    "ts-jest": "^29.4.9",
+    "ts-jest": "^29.4.12",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.58.1"
+    "typescript-eslint": "^8.70.0"
   },
   "engines": {
-    "node": ">=20.12.0"
+    "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public"

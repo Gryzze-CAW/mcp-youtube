@@ -1,5 +1,7 @@
 # YouTube Data MCP Server (@kirbah/mcp-youtube)
 
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.kirbah%2Fmcp-youtube.svg)](https://mcptoplist.com/server/io.github.kirbah%2Fmcp-youtube)
+
 <!-- Badges Start -->
 <p align="left">
   <!-- GitHub Actions CI -->
@@ -36,6 +38,12 @@ Unlike standard API wrappers that flood your LLM with redundant data, this serve
 ## Why Choose This Server?
 
 Most MCP servers are weekend projects. `@kirbah/mcp-youtube` is built for reliable, daily, cost-effective agentic workflows.
+
+> 🎯 **Want feedback on your own channel, not just raw data?** Check out
+> [CreatorLens](https://github.com/kirbah/CreatorLens) - a companion Claude
+> Skill built on this MCP that diagnoses common growth problems (weak
+> hooks, bad thumbnails, flatlined videos) using a real strategist's
+> framework, not just numbers.
 
 ### 📉 1. Save Up to 87% on Tokens (and Context Window)
 
@@ -122,6 +130,12 @@ If you prefer to configure your MCP client manually (e.g., Claude Desktop or Cur
 
 _(Windows PowerShell Users: If `npx` fails, try using `"command": "cmd"` and `"args": ["/k", "npx", "-y", "@kirbah/mcp-youtube"]`)_
 
+### Next Step: Add a Skill
+
+Once your server is connected, try [CreatorLens](https://github.com/kirbah/CreatorLens) -
+a Claude Skill built specifically for this MCP that turns raw YouTube data
+into growth diagnostics (weak hooks, packaging, niche doubt, format pivots).
+
 ## Key Features
 
 - **Optimized Video Information:** Search videos with advanced filters. Retrieve detailed metadata, statistics (views, likes, etc.), and content details, all structured for minimal token footprint.
@@ -157,7 +171,7 @@ If you wish to contribute, modify the server, or run it locally outside of an MC
 
 ### Prerequisites
 
-- Node.js (version specified in `package.json` engines field - currently `>=20.0.0`)
+- Node.js (version specified in `package.json` engines field - currently `>=22.0.0`)
 - npm (usually comes with Node.js)
 - A YouTube Data API v3 Key (see [YouTube API Setup](#youtube-api-setup))
 
@@ -252,7 +266,7 @@ To have an MCP client run your _local development version_ (instead of the publi
 
 ## System Requirements
 
-- Node.js: `>=20.0.0` (as specified in `package.json`)
+- Node.js: `>=22.0.0` (as specified in `package.json`)
 - npm (for managing dependencies and running scripts)
 
 ## Deep Dive: `findConsistentOutlierChannels` Tool
